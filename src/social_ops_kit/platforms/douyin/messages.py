@@ -185,6 +185,13 @@ class DouyinImArtifacts:
     request_path: Path
     response_path: Path
 
+    def write_response_payloads(self, payloads: list[dict[str, Any]]) -> None:
+        self.response_path.parent.mkdir(parents=True, exist_ok=True)
+        self.response_path.write_text(
+            json.dumps(payloads, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
     @classmethod
     def from_workspace(cls, config: SocialOpsConfig) -> "DouyinImArtifacts":
         artifacts_dir = config.workspace / "artifacts"
@@ -341,6 +348,7 @@ class DouyinRealMessageRuntime:
 
         live_hits = list(live_payload.get("hits") or []) if live_payload.get("success") else []
         if live_hits:
+            self._artifacts.write_response_payloads(live_hits)
             parsed_live = DouyinImArtifactParser.extract_threads_from_payload_items(live_hits)
             if parsed_live:
                 return self._threads_with_source(parsed_live, "douyin_web_imapi_live", limit=limit), "douyin_web_imapi_live"

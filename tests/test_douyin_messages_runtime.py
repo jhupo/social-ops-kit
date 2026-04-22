@@ -25,6 +25,7 @@ def _artifact_payloads() -> list[dict]:
 def test_douyin_runtime_marks_live_hit_threads_with_live_source(tmp_path) -> None:
     config = SocialOpsConfig.from_env()
     artifacts = DouyinImArtifacts.from_workspace(config)
+    artifacts = DouyinImArtifacts(request_path=tmp_path / 'artifacts' / 'douyin_im_requests.json', response_path=tmp_path / 'artifacts' / 'douyin_im_base64.json')
     (tmp_path / 'scripts').mkdir(parents=True, exist_ok=True)
     (tmp_path / 'scripts' / 'douyin_live_messages.js').write_text('// test shim\n', encoding='utf-8')
     runner = FakeRunner({"success": True, "items": [], "hits": _artifact_payloads()})
@@ -41,6 +42,8 @@ def test_douyin_runtime_marks_live_hit_threads_with_live_source(tmp_path) -> Non
     assert items
     assert all(item.source == 'douyin_web_imapi_live' for item in items)
     assert runner.calls
+    saved = json.loads(artifacts.response_path.read_text(encoding='utf-8'))
+    assert saved
 
 
 def test_douyin_runtime_marks_artifact_threads_with_artifact_source(tmp_path) -> None:
