@@ -318,6 +318,21 @@ class DouyinRealMessageRuntime:
             )
         return merged[:limit] if limit is not None else merged
 
+    def _threads_with_source(self, items: list[DouyinMessageThread], source: str, limit: int | None = None) -> list[DouyinMessageThread]:
+        rewritten = [
+            DouyinMessageThread(
+                thread_id=item.thread_id,
+                conversation_short_id=item.conversation_short_id,
+                user_sec_uid=item.user_sec_uid,
+                user_name=item.user_name,
+                last_message=item.last_message,
+                unread_count=item.unread_count,
+                source=source,
+            )
+            for item in items
+        ]
+        return rewritten[:limit] if limit is not None else rewritten
+
     def list_threads(self, limit: int | None = None) -> tuple[list[DouyinMessageThread], str]:
         live_payload = self._run_live_action("list_threads", limit=limit)
         live_items = list(live_payload.get("items") or []) if live_payload.get("success") else []
@@ -328,12 +343,10 @@ class DouyinRealMessageRuntime:
         if live_hits:
             parsed_live = DouyinImArtifactParser.extract_threads_from_payload_items(live_hits)
             if parsed_live:
-                sliced_live = parsed_live[:limit] if limit is not None else parsed_live
-                return sliced_live, "douyin_web_imapi_live"
+                return self._threads_with_source(parsed_live, "douyin_web_imapi_live", limit=limit), "douyin_web_imapi_live"
 
         fallback_items = self.list_threads_from_artifacts()
-        sliced = fallback_items[:limit] if limit is not None else fallback_items
-        return sliced, "douyin_imapi_artifacts"
+        return self._threads_with_source(fallback_items, "douyin_imapi_artifacts", limit=limit), "douyin_imapi_artifacts"
 
     def reply_message(self, thread_id: str, content: str) -> dict[str, Any]:
         normalized_thread_id = str(thread_id or "").strip()
