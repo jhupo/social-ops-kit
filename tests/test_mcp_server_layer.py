@@ -109,7 +109,12 @@ def test_server_blueprint_has_curated_tools() -> None:
     assert tool_map["xhs_get_note_detail"]["implemented"] is True
 
 
-def test_tool_service_executes_wired_handlers() -> None:
+def test_tool_service_executes_wired_handlers(monkeypatch) -> None:
+    class FakeLiveRuntime:
+        def reply_comment(self, note_id: str, xsec_token: str, comment_id: str, content: str, account: str | None = None) -> dict[str, object]:
+            return {"success": True, "account": account or "Hermes", "result": {"success": True}}
+
+    monkeypatch.setattr("social_ops_kit.mcp.server.XhsLiveRuntime.from_config", lambda config: FakeLiveRuntime())
     service = SocialOpsToolService(config=SocialOpsConfig.from_env())
     result = service.execute(
         "xhs_reply_comment",
@@ -125,7 +130,12 @@ def test_tool_service_executes_wired_handlers() -> None:
 
 
 
-def test_tool_service_executes_xhs_post_comment() -> None:
+def test_tool_service_executes_xhs_post_comment(monkeypatch) -> None:
+    class FakeLiveRuntime:
+        def post_comment(self, note_id: str, xsec_token: str, content: str, account: str | None = None) -> dict[str, object]:
+            return {"success": True, "account": account or "Hermes", "result": {"success": True}}
+
+    monkeypatch.setattr("social_ops_kit.mcp.server.XhsLiveRuntime.from_config", lambda config: FakeLiveRuntime())
     service = SocialOpsToolService(config=SocialOpsConfig.from_env())
     result = service.execute(
         "xhs_post_comment",
@@ -138,6 +148,7 @@ def test_tool_service_executes_xhs_post_comment() -> None:
     assert result["success"] is True
     assert result["note_id"] == "note-1"
     assert result["content"] == "今天也想把一句话留在这。"
+    assert result["account"] == "Hermes"
 
 
 
@@ -576,24 +587,32 @@ def test_tool_service_executes_xhs_get_my_notes() -> None:
     assert result["items"][0]["title"] == "A"
 
 
-def test_tool_service_executes_xhs_get_notifications() -> None:
+def test_tool_service_executes_xhs_get_notifications(monkeypatch) -> None:
+    class FakeLiveRuntime:
+        def get_notifications(self, type_: str = 'all', limit: int | None = None, account: str | None = None) -> dict[str, object]:
+            return {
+                "success": True,
+                "account": account or "Hermes",
+                "result": {
+                    "mentions": [
+                        {
+                            "id": "n1",
+                            "user": {"nickname": "十一的朋友"},
+                            "commentContent": "来看看你",
+                            "noteId": "note-1",
+                            "commentId": "comment-1",
+                            "xsecToken": "token-1",
+                            "time": "2026-04-21 20:00",
+                        }
+                    ]
+                },
+            }
+
+    monkeypatch.setattr("social_ops_kit.mcp.server.XhsLiveRuntime.from_config", lambda config: FakeLiveRuntime())
     service = SocialOpsToolService(config=SocialOpsConfig.from_env())
-    result = service.execute(
-        "xhs_get_notifications",
-        {
-            "notifications": [
-                {
-                    "id": "n1",
-                    "type": "mention",
-                    "user_name": "十一的朋友",
-                    "content": "来看看你",
-                    "note_id": "note-1",
-                    "created_at": "2026-04-21 20:00",
-                }
-            ]
-        },
-    )
+    result = service.execute("xhs_get_notifications", {})
     assert result["success"] is True
+    assert result["source"] == "xhs_live_notifications"
     assert len(result["items"]) == 1
     assert result["items"][0]["type"] == "mention"
     assert result["items"][0]["user_name"] == "十一的朋友"

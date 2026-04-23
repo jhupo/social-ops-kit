@@ -19,6 +19,7 @@ from social_ops_kit.platforms.xhs.comments import (
     XhsCommentPostRequest,
     XhsCommentReplyRequest,
 )
+from social_ops_kit.platforms.xhs.live import XhsLiveRuntime
 from social_ops_kit.platforms.xhs.drafts import XhsDraftRequest
 from social_ops_kit.platforms.xhs.interactions import (
     XhsCommentFavoriteRequest,
@@ -470,19 +471,21 @@ class SocialOpsToolService:
         }
 
     def _xhs_post_comment(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        runtime = XhsRuntime.from_config(self._config)
-        result = runtime.comment_runtime().post_comment(
-            XhsCommentPostRequest(
-                note_id=str(arguments.get("note_id") or ""),
-                xsec_token=str(arguments.get("xsec_token") or ""),
-                content=str(arguments.get("content") or ""),
-            )
+        runtime = XhsLiveRuntime.from_config(self._config)
+        result = runtime.post_comment(
+            note_id=str(arguments.get("note_id") or ""),
+            xsec_token=str(arguments.get("xsec_token") or ""),
+            content=str(arguments.get("content") or ""),
+            account=str(arguments.get("account") or "") or None,
         )
+        payload = dict(result.get("result") or {}) if result.get("success") else {}
         return {
-            "success": result.success,
-            "note_id": result.note_id,
-            "content": result.content,
-            "error": result.error,
+            "success": bool(result.get("success")),
+            "note_id": str(arguments.get("note_id") or ""),
+            "content": str(arguments.get("content") or ""),
+            "account": result.get("account"),
+            "error": payload.get("error") or result.get("error"),
+            "raw": payload or result,
         }
 
     def _xhs_publish_draft(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -557,16 +560,49 @@ class SocialOpsToolService:
         }
 
     def _xhs_get_notifications(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        runtime = XhsRuntime.from_config(self._config)
-        notification_runtime = runtime.notification_runtime()
-        limit = arguments.get("limit")
-        items = notification_runtime.parse_notifications(
-            list(arguments.get("notifications") or []),
-            limit=int(limit) if limit is not None else None,
+        provided = list(arguments.get("notifications") or [])
+        if provided:
+            runtime = XhsRuntime.from_config(self._config)
+            notification_runtime = runtime.notification_runtime()
+            limit = arguments.get("limit")
+            items = notification_runtime.parse_notifications(
+                provided,
+                limit=int(limit) if limit is not None else None,
+            )
+            return {
+                "success": True,
+                "items": [item.as_dict() for item in items],
+                "source": "input_notifications",
+            }
+
+        live_runtime = XhsLiveRuntime.from_config(self._config)
+        result = live_runtime.get_notifications(
+            type_=str(arguments.get("type") or "all"),
+            limit=int(arguments.get("limit") or 20),
+            account=str(arguments.get("account") or "") or None,
         )
+        payload = dict(result.get("result") or {}) if result.get("success") else {}
+        items: list[dict[str, Any]] = []
+        for key in ("mentions", "likes", "connections"):
+            for entry in payload.get(key) or []:
+                items.append({
+                    "id": entry.get("id") or "",
+                    "type": key[:-1] if key.endswith('s') else key,
+                    "user_name": ((entry.get("user") or {}).get("nickname") or ""),
+                    "content": entry.get("commentContent") or entry.get("title") or "",
+                    "note_id": entry.get("noteId") or "",
+                    "comment_id": entry.get("commentId") or "",
+                    "xsec_token": entry.get("xsecToken") or "",
+                    "created_at": entry.get("time") or "",
+                    "raw": entry,
+                })
         return {
-            "success": True,
-            "items": [item.as_dict() for item in items],
+            "success": bool(result.get("success")),
+            "items": items,
+            "source": "xhs_live_notifications",
+            "account": result.get("account"),
+            "error": payload.get("error") or result.get("error"),
+            "raw": payload or result,
         }
 
     def _xhs_get_post_stats(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -591,21 +627,22 @@ class SocialOpsToolService:
         return {"success": True, **reply.as_dict()}
 
     def _xhs_reply_comment(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        runtime = XhsRuntime.from_config(self._config)
-        comment_runtime = runtime.comment_runtime()
-        result = comment_runtime.reply_comment(
-            XhsCommentReplyRequest(
-                note_id=str(arguments.get("note_id") or ""),
-                xsec_token=str(arguments.get("xsec_token") or ""),
-                comment_id=str(arguments.get("comment_id") or ""),
-                content=str(arguments.get("content") or ""),
-            )
+        runtime = XhsLiveRuntime.from_config(self._config)
+        result = runtime.reply_comment(
+            note_id=str(arguments.get("note_id") or ""),
+            xsec_token=str(arguments.get("xsec_token") or ""),
+            comment_id=str(arguments.get("comment_id") or ""),
+            content=str(arguments.get("content") or ""),
+            account=str(arguments.get("account") or "") or None,
         )
+        payload = dict(result.get("result") or {}) if result.get("success") else {}
         return {
-            "success": result.success,
-            "note_id": result.note_id,
-            "comment_id": result.comment_id,
-            "error": result.error,
+            "success": bool(result.get("success")),
+            "note_id": str(arguments.get("note_id") or ""),
+            "comment_id": str(arguments.get("comment_id") or ""),
+            "account": result.get("account"),
+            "error": payload.get("error") or result.get("error"),
+            "raw": payload or result,
         }
 
 
